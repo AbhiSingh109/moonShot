@@ -60,17 +60,52 @@ export default function ResumePage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzed, setAnalyzed] = useState(false);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<any>(null);
 
-  const onDrop = useCallback((accepted: File[]) => {
+  const onDrop = useCallback(async (accepted: File[]) => {
     if (accepted.length > 0) {
-      setFile(accepted[0]);
+      const selectedFile = accepted[0];
+      setFile(selectedFile);
       setAnalyzing(true);
       setAnalyzed(false);
-      // Simulate AI analysis
-      setTimeout(() => {
-        setAnalyzing(false);
+
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+
+      try {
+        const response = await fetch("/api/v1/resume/analyze", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.detail || "Failed to analyze resume");
+        }
+
+        const data = await response.json();
+        
+        // Map backend properties (snake_case) to frontend (camelCase)
+        const mappedData = {
+          atsScore: data.ats_score,
+          overallScore: data.overall_score,
+          keywordMatchScore: data.keyword_match_score,
+          sections: data.sections,
+          keywords: {
+            present: data.keywords_present,
+            missing: data.keywords_missing,
+          },
+          improvements: data.improvements
+        };
+
+        setAnalysis(mappedData);
         setAnalyzed(true);
-      }, 3200);
+      } catch (err: any) {
+        alert("Error analyzing resume: " + err.message);
+        setFile(null);
+      } finally {
+        setAnalyzing(false);
+      }
     }
   }, []);
 
@@ -185,7 +220,7 @@ export default function ResumePage() {
 
       {/* Analysis Results */}
       <AnimatePresence>
-        {analyzed && (
+        {analyzed && analysis && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -194,9 +229,9 @@ export default function ResumePage() {
             {/* Score Overview */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
               {[
-                { label: "Overall Resume Score", score: mockAnalysis.overallScore, color: "#6366F1", icon: <Star size={18} /> },
-                { label: "ATS Compatibility", score: mockAnalysis.atsScore, color: "#06B6D4", icon: <TrendingUp size={18} /> },
-                { label: "Keyword Match", score: 65, color: "#10B981", icon: <Target size={18} /> },
+                { label: "Overall Resume Score", score: analysis.overallScore, color: "#6366F1", icon: <Star size={18} /> },
+                { label: "ATS Compatibility", score: analysis.atsScore, color: "#06B6D4", icon: <TrendingUp size={18} /> },
+                { label: "Keyword Match", score: analysis.keywordMatchScore, color: "#10B981", icon: <Target size={18} /> },
               ].map((s, i) => (
                 <motion.div
                   key={i}
@@ -235,7 +270,7 @@ export default function ResumePage() {
               }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>Section Breakdown</h3>
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                  {Object.entries(mockAnalysis.sections).map(([key, val], i) => (
+                  {Object.entries(analysis.sections).map(([key, val]: [string, any], i) => (
                     <div key={key}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, cursor: "pointer" }}
                         onClick={() => setExpandedSection(expandedSection === key ? null : key)}
@@ -286,7 +321,7 @@ export default function ResumePage() {
                     <CheckCircle2 size={13} /> Present Keywords
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {mockAnalysis.keywords.present.map((kw) => (
+                    {analysis.keywords.present.map((kw: string) => (
                       <span key={kw} className="badge badge-green" style={{ fontSize: 12 }}>{kw}</span>
                     ))}
                   </div>
@@ -296,7 +331,7 @@ export default function ResumePage() {
                     <X size={13} /> Missing Keywords
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {mockAnalysis.keywords.missing.map((kw) => (
+                    {analysis.keywords.missing.map((kw: string) => (
                       <span key={kw} className="badge badge-red" style={{ fontSize: 12 }}>{kw}</span>
                     ))}
                   </div>
@@ -311,7 +346,7 @@ export default function ResumePage() {
             }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>🔧 AI Improvement Suggestions</h3>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {mockAnalysis.improvements.map((item, i) => (
+                {analysis.improvements.map((item: any, i: number) => (
                   <motion.div
                     key={i}
                     initial={{ opacity: 0, x: -10 }}
@@ -343,7 +378,7 @@ export default function ResumePage() {
                   <Download size={16} /> Download Report
                 </button>
                 <button className="btn-secondary" style={{ fontSize: 14, padding: "10px 24px", display: "flex", alignItems: "center", gap: 8 }}
-                  onClick={() => { setFile(null); setAnalyzed(false); }}>
+                  onClick={() => { setFile(null); setAnalyzed(false); setAnalysis(null); }}>
                   <RefreshCw size={16} /> Analyze New Resume
                 </button>
               </div>

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
+import { Providers } from "@/components/Providers";
 
 export const metadata: Metadata = {
   title: "CopilotAI — Your AI Career Copilot for College Students",
@@ -26,7 +27,9 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
       <body>
-        {children}
+        <Providers>
+          {children}
+        </Providers>
         <Toaster
           position="top-right"
           toastOptions={{
@@ -43,3 +46,4 @@ export default function RootLayout({
     </html>
   );
 }
+

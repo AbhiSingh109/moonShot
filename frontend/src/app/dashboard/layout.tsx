@@ -3,10 +3,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { useSession, signOut } from "next-auth/react";
 import {
   Zap, LayoutDashboard, FileText, Map, MessageSquare,
   BarChart3, Settings, Bell, Search, ChevronDown,
-  LogOut, User
+  LogOut, User, Briefcase
 } from "lucide-react";
 
 const navItems = [
@@ -14,6 +15,7 @@ const navItems = [
   { label: "Resume", href: "/dashboard/resume", icon: <FileText size={18} /> },
   { label: "Roadmap", href: "/dashboard/roadmap", icon: <Map size={18} /> },
   { label: "Mock Interview", href: "/dashboard/interview", icon: <MessageSquare size={18} /> },
+  { label: "Job Matches", href: "/dashboard/jobs", icon: <Briefcase size={18} /> },
   { label: "Analytics", href: "/dashboard/analytics", icon: <BarChart3 size={18} /> },
   { label: "Settings", href: "/dashboard/settings", icon: <Settings size={18} /> },
 ];
@@ -21,6 +23,49 @@ const navItems = [
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const { data: session, status } = useSession();
+
+  // Protect route
+  if (status === "loading") {
+    return (
+      <div style={{
+        display: "flex", minHeight: "100vh", alignItems: "center",
+        justifyContent: "center", background: "var(--bg-primary)",
+        color: "var(--text-secondary)", fontSize: 15, fontWeight: 500,
+        gap: 12
+      }}>
+        <div style={{
+          width: 20, height: 20, borderRadius: "50%",
+          border: "2px solid rgba(255,255,255,0.1)",
+          borderTopColor: "var(--accent-primary)",
+          animation: "spin 1s linear infinite"
+        }} />
+        Loading your workspace...
+        <style jsx global>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  if (status === "unauthenticated") {
+    if (typeof window !== "undefined") {
+      window.location.href = "/";
+    }
+    return null;
+  }
+
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .substring(0, 2);
+  };
+  const userInitials = session?.user?.name ? getInitials(session.user.name) : "U";
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "var(--bg-primary)" }}>
@@ -56,15 +101,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           borderRadius: "var(--radius-md)", padding: "12px 14px",
           display: "flex", alignItems: "center", gap: 10, marginBottom: 28, cursor: "pointer",
         }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: "50%",
-            background: "var(--gradient-primary)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 14, fontWeight: 700, color: "white", flexShrink: 0,
-          }}>AS</div>
+          {session?.user?.image ? (
+            <img
+              src={session.user.image}
+              alt={session.user.name || "User"}
+              style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+            />
+          ) : (
+            <div style={{
+              width: 36, height: 36, borderRadius: "50%",
+              background: "var(--gradient-primary)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 14, fontWeight: 700, color: "white", flexShrink: 0,
+            }}>{userInitials}</div>
+          )}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Abhinav Singh</div>
-            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>CS • Final Year</div>
+            <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {session?.user?.name || "Copilot User"}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {session?.user?.email || "Student"}
+            </div>
           </div>
           <div style={{
             width: 8, height: 8, borderRadius: "50%",
@@ -121,12 +178,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Logout */}
-        <button style={{
-          display: "flex", alignItems: "center", gap: 10, marginTop: 12,
-          padding: "10px 14px", borderRadius: "var(--radius-md)",
-          background: "transparent", border: "none", color: "var(--text-secondary)",
-          fontSize: 14, cursor: "pointer", transition: "all 0.2s", width: "100%",
-        }}
+        <button
+          onClick={() => signOut({ callbackUrl: "/" })}
+          style={{
+            display: "flex", alignItems: "center", gap: 10, marginTop: 12,
+            padding: "10px 14px", borderRadius: "var(--radius-md)",
+            background: "transparent", border: "none", color: "var(--text-secondary)",
+            fontSize: 14, cursor: "pointer", transition: "all 0.2s", width: "100%",
+          }}
           onMouseEnter={e => { e.currentTarget.style.background = "rgba(239,68,68,0.08)"; e.currentTarget.style.color = "#FCA5A5"; }}
           onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-secondary)"; }}
         >
@@ -168,14 +227,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 background: "var(--accent-primary)", border: "2px solid var(--bg-secondary)",
               }} />
             </div>
-            <div style={{
-              width: 36, height: 36, borderRadius: "50%",
-              background: "var(--gradient-primary)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 13, fontWeight: 700, color: "white", cursor: "pointer",
-            }}>
-              AS
-            </div>
+            {session?.user?.image ? (
+              <img
+                src={session.user.image}
+                alt={session.user.name || "User"}
+                style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", cursor: "pointer" }}
+              />
+            ) : (
+              <div style={{
+                width: 36, height: 36, borderRadius: "50%",
+                background: "var(--gradient-primary)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 13, fontWeight: 700, color: "white", cursor: "pointer",
+              }}>
+                {userInitials}
+              </div>
+            )}
           </div>
         </header>
 

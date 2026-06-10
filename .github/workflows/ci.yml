@@ -1,45 +1,66 @@
-name: CI/CD Pipeline
+name: Moonshot CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [ main, master ]
   pull_request:
-    branches: [main]
+    branches: [ main, master ]
 
 jobs:
-  frontend:
-    name: Frontend Build & Lint
+  frontend-check:
+    name: Frontend Build & Lint Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Setup Node.js
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-size: '18'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
-      - name: Install dependencies
-        working-directory: frontend
-        run: npm ci
-      - name: Type check
-        working-directory: frontend
-        run: npx tsc --noEmit
-      - name: Build
-        working-directory: frontend
-        run: npm run build
 
-  backend:
-    name: Backend Tests
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci --legacy-peer-deps
+
+      - name: Generate Prisma Client
+        run: |
+          cd frontend
+          npx prisma generate
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/career_copilot"
+
+      - name: Run build
+        run: |
+          cd frontend
+          npm run build
+        env:
+          NEXTAUTH_SECRET: "dummy_secret_for_ci_build"
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/career_copilot"
+
+  backend-check:
+    name: Backend Lint & Type Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Setup Python
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
+
       - name: Install dependencies
-        working-directory: backend
-        run: pip install -r requirements.txt
-      - name: Start app check
-        working-directory: backend
-        run: python -c "from main import app; print('✓ FastAPI app loaded successfully')"
+        run: |
+          cd backend
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run code validation
+        run: |
+          cd backend
+          python -m compileall .

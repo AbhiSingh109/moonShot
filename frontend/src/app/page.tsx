@@ -1,6 +1,7 @@
 "use client";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useSession, signIn, signOut } from "next-auth/react";
 import {
   Zap, ArrowRight, Brain, FileSearch, Map, MessageSquare,
   BarChart3, Shield, Star, ChevronRight, ExternalLink,
@@ -10,6 +11,8 @@ import {
 
 // ───────────────────────── Navbar ─────────────────────────
 function Navbar() {
+  const { data: session, status } = useSession();
+
   return (
     <motion.nav
       initial={{ y: -20, opacity: 0 }}
@@ -49,17 +52,42 @@ function Navbar() {
           ))}
         </div>
 
-        <div style={{ display: "flex", gap: 12 }}>
-          <Link href="/dashboard">
-            <button className="btn-secondary" style={{ padding: "9px 20px", fontSize: 14 }}>
-              Sign In
-            </button>
-          </Link>
-          <Link href="/dashboard">
-            <button className="btn-primary" style={{ padding: "9px 20px", fontSize: 14 }}>
-              Get Started Free
-            </button>
-          </Link>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          {status === "loading" ? (
+            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>Loading...</span>
+          ) : session ? (
+            <>
+              <Link href="/dashboard">
+                <button className="btn-secondary" style={{ padding: "9px 20px", fontSize: 14 }}>
+                  Dashboard
+                </button>
+              </Link>
+              <button
+                onClick={() => signOut({ callbackUrl: "/" })}
+                className="btn-primary"
+                style={{ padding: "9px 20px", fontSize: 14 }}
+              >
+                Sign Out
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => signIn()}
+                className="btn-secondary"
+                style={{ padding: "9px 20px", fontSize: 14 }}
+              >
+                Sign In
+              </button>
+              <button
+                onClick={() => signIn()}
+                className="btn-primary"
+                style={{ padding: "9px 20px", fontSize: 14 }}
+              >
+                Get Started Free
+              </button>
+            </>
+          )}
         </div>
       </div>
     </motion.nav>

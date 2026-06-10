@@ -8,94 +8,7 @@ import {
   Target, Trophy, Calendar
 } from "lucide-react";
 
-const roadmapData = [
-  {
-    week: "Week 1–2",
-    title: "TypeScript Fundamentals",
-    status: "completed",
-    priority: "critical",
-    description: "Master TypeScript — types, interfaces, generics, and decorators. This is non-negotiable for 89% of SDE roles.",
-    skills: ["Types & Interfaces", "Generics", "Decorators", "tsconfig"],
-    resources: [
-      { type: "youtube", title: "TypeScript Full Course", url: "#", duration: "4h" },
-      { type: "docs", title: "Official TS Handbook", url: "#", duration: "6h" },
-      { type: "project", title: "Build: TS REST API", url: "#", duration: "8h" },
-    ],
-    project: "Build a typed REST API with Express + TypeScript",
-    xp: 150,
-  },
-  {
-    week: "Week 3–4",
-    title: "System Design Basics",
-    status: "in-progress",
-    priority: "critical",
-    description: "Learn scalability, load balancers, databases, caching, and distributed systems concepts.",
-    skills: ["Load Balancing", "CAP Theorem", "Database Sharding", "Caching Strategies"],
-    resources: [
-      { type: "youtube", title: "System Design Primer", url: "#", duration: "8h" },
-      { type: "docs", title: "Designing Data-Intensive Apps", url: "#", duration: "20h" },
-      { type: "project", title: "Design: URL Shortener", url: "#", duration: "4h" },
-    ],
-    project: "Design and diagram a Twitter-like feed system",
-    xp: 200,
-  },
-  {
-    week: "Week 5–6",
-    title: "Docker & Containerization",
-    status: "locked",
-    priority: "high",
-    description: "Containerize applications with Docker, write docker-compose files, and understand K8s basics.",
-    skills: ["Dockerfile", "docker-compose", "Networking", "Kubernetes Basics"],
-    resources: [
-      { type: "youtube", title: "Docker Mastery Course", url: "#", duration: "6h" },
-      { type: "project", title: "Containerize your TS API", url: "#", duration: "4h" },
-    ],
-    project: "Deploy a full-stack app with Docker Compose",
-    xp: 180,
-  },
-  {
-    week: "Week 7–8",
-    title: "Redis & Caching",
-    status: "locked",
-    priority: "high",
-    description: "Implement caching strategies, session management, pub/sub, and rate limiting with Redis.",
-    skills: ["Data Structures", "Caching Patterns", "Pub/Sub", "Rate Limiting"],
-    resources: [
-      { type: "docs", title: "Redis University (Free)", url: "#", duration: "10h" },
-      { type: "project", title: "Add caching to your API", url: "#", duration: "6h" },
-    ],
-    project: "Implement Redis caching for a high-traffic endpoint",
-    xp: 160,
-  },
-  {
-    week: "Week 9–10",
-    title: "GraphQL & API Design",
-    status: "locked",
-    priority: "medium",
-    description: "Master GraphQL schema design, resolvers, subscriptions, and compare with REST patterns.",
-    skills: ["Schema Design", "Resolvers", "Subscriptions", "Apollo"],
-    resources: [
-      { type: "youtube", title: "GraphQL Crash Course", url: "#", duration: "3h" },
-      { type: "project", title: "Build: GraphQL API", url: "#", duration: "10h" },
-    ],
-    project: "Rebuild your REST API in GraphQL with Apollo Server",
-    xp: 140,
-  },
-  {
-    week: "Week 11–12",
-    title: "CI/CD & DevOps Basics",
-    status: "locked",
-    priority: "medium",
-    description: "Set up automated pipelines with GitHub Actions, understand deployment strategies, and monitoring.",
-    skills: ["GitHub Actions", "Deployment Strategies", "Monitoring", "Logging"],
-    resources: [
-      { type: "docs", title: "GitHub Actions Docs", url: "#", duration: "4h" },
-      { type: "project", title: "CI/CD Pipeline Setup", url: "#", duration: "8h" },
-    ],
-    project: "Build an automated CI/CD pipeline for your project",
-    xp: 180,
-  },
-];
+import { useEffect } from "react";
 
 const statusConfig: Record<string, { color: string; label: string; icon: React.ReactNode }> = {
   completed: { color: "#10B981", label: "Completed", icon: <CheckCircle2 size={16} /> },
@@ -115,11 +28,90 @@ const resourceIcon: Record<string, React.ReactNode> = {
   project: <Code size={14} />,
 };
 
-export default function RoadmapPage() {
-  const [expanded, setExpanded] = useState<string | null>("Week 3–4");
+interface RoadmapResource {
+  type: string;
+  title: string;
+  url: string;
+  duration: string;
+}
 
-  const totalXP = roadmapData.reduce((acc, r) => r.status === "completed" ? acc + r.xp : acc, 0);
-  const completed = roadmapData.filter(r => r.status === "completed").length;
+interface RoadmapWeek {
+  week: string;
+  title: string;
+  status: string;
+  priority: string;
+  description: string;
+  skills: string[];
+  resources: RoadmapResource[];
+  project: string;
+  xp: number;
+}
+
+export default function RoadmapPage() {
+  const [roadmap, setRoadmap] = useState<RoadmapWeek[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [totalXP, setTotalXP] = useState(0);
+  const [completed, setCompleted] = useState(0);
+
+  useEffect(() => {
+    const fetchRoadmap = async () => {
+      try {
+        const res = await fetch("/api/v1/roadmap");
+        if (!res.ok) {
+          throw new Error("Failed to fetch roadmap");
+        }
+        const data = await res.json();
+        
+        // Map status based on week indexes
+        const mappedWeeks = data.weeks.map((w: any, index: number) => {
+          let status = "locked";
+          if (index === 0) status = "completed";
+          else if (index === 1) status = "in-progress";
+          
+          return {
+            ...w,
+            status,
+            priority: w.priority || "critical"
+          };
+        });
+
+        setRoadmap(mappedWeeks);
+        setTotalXP(mappedWeeks.reduce((acc: number, r: any) => r.status === "completed" ? acc + r.xp : acc, 0));
+        setCompleted(mappedWeeks.filter((r: any) => r.status === "completed").length);
+        setExpanded(mappedWeeks[1]?.week || mappedWeeks[0]?.week || null);
+      } catch (err: any) {
+        console.error("Roadmap fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRoadmap();
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{
+        display: "flex", minHeight: "60vh", alignItems: "center",
+        justifyContent: "center", color: "var(--text-secondary)", fontSize: 15,
+        gap: 12
+      }}>
+        <div style={{
+          width: 20, height: 20, borderRadius: "50%",
+          border: "2px solid rgba(255,255,255,0.1)",
+          borderTopColor: "var(--accent-primary)",
+          animation: "spin 1s linear infinite"
+        }} />
+        Analyzing profile and generating personalized roadmap...
+        <style jsx global>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -130,7 +122,7 @@ export default function RoadmapPage() {
             Your Learning Roadmap
           </h1>
           <p style={{ color: "var(--text-secondary)", fontSize: 15 }}>
-            AI-generated 12-week path from your current profile to SDE-ready.
+            AI-generated personalized roadmap based on your detected skill gaps.
           </p>
         </div>
         <div style={{ display: "flex", gap: 12 }}>
@@ -152,7 +144,7 @@ export default function RoadmapPage() {
           }}>
             <Target size={18} style={{ color: "#6366F1" }} />
             <div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: "#6366F1" }}>{completed}/{roadmapData.length}</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#6366F1" }}>{completed}/{roadmap.length}</div>
               <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Completed</div>
             </div>
           </div>
@@ -167,20 +159,20 @@ export default function RoadmapPage() {
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
           <span style={{ fontSize: 14, fontWeight: 600 }}>Overall Progress</span>
           <span style={{ fontSize: 14, fontWeight: 700, color: "var(--accent-primary)" }}>
-            {Math.round((completed / roadmapData.length) * 100)}%
+            {Math.round((completed / roadmap.length) * 100)}%
           </span>
         </div>
         <div className="progress-bar" style={{ height: 10 }}>
           <motion.div
             className="progress-fill"
             initial={{ width: 0 }}
-            animate={{ width: `${(completed / roadmapData.length) * 100}%` }}
+            animate={{ width: `${(completed / roadmap.length) * 100}%` }}
             transition={{ duration: 1.5, ease: "easeOut" }}
           />
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Start: JavaScript Basics</span>
-          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Goal: SDE-1 Ready</span>
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Start Profile Analysis</span>
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Goal: Placement Ready</span>
         </div>
       </div>
 
@@ -194,7 +186,7 @@ export default function RoadmapPage() {
         }} />
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {roadmapData.map((item, i) => {
+          {roadmap.map((item, i) => {
             const isExpanded = expanded === item.week;
             const config = statusConfig[item.status];
             const isLocked = item.status === "locked";

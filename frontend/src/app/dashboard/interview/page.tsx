@@ -59,55 +59,154 @@ export default function InterviewPage() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  
+  // Real API states
+  const [interviewId, setInterviewId] = useState("");
+  const [loadingStart, setLoadingStart] = useState(false);
+  
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const startInterview = () => {
-    setStarted(true);
-    setMessages([{
-      role: "interviewer",
-      content: `Hi! I'm your AI interviewer for the ${selectedRole} position. I'll ask you 5 questions covering technical concepts, system design, and behavioral scenarios. Take your time, think out loud, and don't worry — this is a safe space to practice! Ready? Let's start.\n\n${interviewQuestions[0].q}`,
-      timestamp: new Date(),
-    }]);
-    setQIndex(0);
+  const startInterview = async () => {
+    setLoadingStart(true);
+    try {
+      const res = await fetch("/api/v1/interview/start", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          target_role: selectedRole
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to start interview");
+      }
+
+      const data = await res.json();
+      setInterviewId(data.interview_id);
+      
+      const formattedMsgs = data.messages.map((m: any) => ({
+        role: m.role,
+        content: m.content,
+        timestamp: new Date(m.timestamp)
+      }));
+      setMessages(formattedMsgs);
+      setStarted(true);
+      setQIndex(0);
+      setCompleted(false);
+      setShowFeedback(false);
+    } catch (err: any) {
+      alert("Failed to start interview: " + err.message);
+    } finally {
+      setLoadingStart(false);
+    }
   };
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (!input.trim() || waiting) return;
     const userMsg: Message = { role: "user", content: input, timestamp: new Date() };
     setMessages(prev => [...prev, userMsg]);
+    const currentInput = input;
     setInput("");
     setWaiting(true);
     setShowFeedback(false);
 
-    setTimeout(() => {
-      const currentQ = interviewQuestions[qIndex];
-      const feedbackMsg: Message = {
-        role: "interviewer",
-        content: qIndex < interviewQuestions.length - 1
-          ? `${currentQ.feedback}\n\nGreat, let's move on! Here's the next question:\n\n${interviewQuestions[qIndex + 1].q}`
-          : `${currentQ.feedback}\n\n🎉 That's a wrap! You've completed the mock interview. Check your detailed performance report below.`,
-        timestamp: new Date(),
-        score: currentQ.score,
-        feedback: currentQ.feedback,
-      };
-      setMessages(prev => [...prev, feedbackMsg]);
-      setWaiting(false);
-      setShowFeedback(true);
-      if (qIndex < interviewQuestions.length - 1) {
-        setQIndex(prev => prev + 1);
-      } else {
-        setCompleted(true);
+    try {
+      const response = await fetch("/api/v1/interview/respond", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          interview_id: interviewId,
+          message: currentInput
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to get interviewer response");
       }
-    }, 1800);
+
+      // Add a placeholder assistant message to stream into
+      setMessages(prev => [...prev, {
+        role: "interviewer",
+        content: "",
+        timestamp: new Date()
+      }]);
+      setWaiting(false);
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      if (!reader) return;
+
+      let fullContent = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n\n");
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const cleanLine = line.substring(6).trim();
+            if (!cleanLine) continue;
+
+            try {
+              const data = JSON.parse(cleanLine);
+              if (data.text) {
+                fullContent += data.text;
+                setMessages(prev => {
+                  const updated = [...prev];
+                  if (updated.length > 0) {
+                    updated[updated.length - 1].content = fullContent;
+                  }
+                  return updated;
+                });
+              } else if (data.score !== undefined) {
+                setMessages(prev => {
+                  const updated = [...prev];
+                  if (updated.length > 0) {
+                    updated[updated.length - 1].score = data.score;
+                    updated[updated.length - 1].feedback = data.feedback;
+                  }
+                  return updated;
+                });
+
+                if (data.is_complete) {
+                  setCompleted(true);
+                } else {
+                  setQIndex(prev => prev + 1);
+                }
+                setShowFeedback(true);
+              }
+            } catch (e) {
+              console.error("Error parsing JSON chunk:", e);
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error("Communication error:", err);
+      setMessages(prev => [...prev, {
+        role: "interviewer",
+        content: `Error: Unable to connect to the mock interview service. (${err.message})`,
+        timestamp: new Date()
+      }]);
+      setWaiting(false);
+    }
   };
 
-  const avgScore = Math.round(
-    interviewQuestions.slice(0, qIndex + 1).reduce((acc, q) => acc + q.score, 0) / (qIndex + 1)
-  );
+  const scores = messages.map(m => m.score).filter((s): s is number => s !== undefined);
+  const avgScore = scores.length > 0
+    ? Math.round(scores.reduce((acc, s) => acc + s, 0) / scores.length)
+    : 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24, height: "calc(100vh - 128px)" }}>
@@ -182,8 +281,13 @@ export default function InterviewPage() {
               ))}
             </div>
 
-            <button className="btn-primary" onClick={startInterview} style={{ width: "100%", fontSize: 15, padding: "14px" }}>
-              Start Interview → {selectedRole.split(" at ")[0]}
+            <button
+              className="btn-primary"
+              onClick={startInterview}
+              disabled={loadingStart}
+              style={{ width: "100%", fontSize: 15, padding: "14px", opacity: loadingStart ? 0.7 : 1 }}
+            >
+              {loadingStart ? "Connecting AI..." : `Start Interview → ${selectedRole.split(" at ")[0]}`}
             </button>
           </div>
         </motion.div>
